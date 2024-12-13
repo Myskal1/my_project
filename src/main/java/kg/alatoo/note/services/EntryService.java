@@ -6,6 +6,12 @@ import kg.alatoo.note.repositories.EntryRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,11 +31,18 @@ public class EntryService {
 
     private final EntryRepo entryRepo;
     private final UserService userService;
+    private final S3Client s3Client;
 
     @Autowired
     public EntryService(EntryRepo entryRepo, UserService userService) {
         this.entryRepo = entryRepo;
         this.userService = userService;
+        // Initialize the S3Client
+        this.s3Client = S3Client.builder()
+                .region(software.amazon.awssdk.regions.Region.of("eu-north-1")) // Choose the correct region
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create("YOUR_ACCESS_KEY", "YOUR_SECRET_KEY"))) // Use the appropriate keys
+                .build();
     }
 
     public List<Entry> getAllEntries(String email) {
@@ -96,7 +109,7 @@ public class EntryService {
 
         for (MultipartFile image : images) {
             try {
-                String fileName = saveImage(image);
+                String fileName = saveImageToS3(image);
                 if (fileName != null) {
                     uploadedImages.add(fileName);
                     entry.getImages().add(fileName);
@@ -119,7 +132,6 @@ public class EntryService {
             return false;
         }
 
-        // Убедимся, что сравниваем только имя файла
         String fileName = imageUrl.replace("images/", "");
         if (!entry.getImages().contains(fileName)) {
             LOGGER.warning("Image file name not found in entry images: " + fileName);
@@ -129,21 +141,13 @@ public class EntryService {
         entry.getImages().remove(fileName);
         entryRepo.save(entry);
 
-        Path filePath = Paths.get(UPLOAD_DIR, fileName);
-        LOGGER.info("Attempting to delete file: " + filePath.toAbsolutePath());
-
-        try {
-            boolean fileDeleted = Files.deleteIfExists(filePath);
-            LOGGER.info("File deletion status: " + fileDeleted);
-        } catch (IOException e) {
-            LOGGER.severe("Error deleting file: " + e.getMessage());
-            e.printStackTrace();
-        }
+        // Delete image from S3
+        deleteImageFromS3(fileName);
 
         return true;
     }
 
-    private String saveImage(MultipartFile image) throws IOException {
+    private String saveImageToS3(MultipartFile image) throws IOException {
         String originalFilename = image.getOriginalFilename();
         if (originalFilename == null || !originalFilename.contains(".")) {
             throw new IllegalArgumentException("Invalid file name: " + originalFilename);
@@ -152,12 +156,23 @@ public class EntryService {
         String fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
         String fileName = UUID.randomUUID().toString() + fileExtension;
 
-        Path path = Paths.get(UPLOAD_DIR, fileName);
-        LOGGER.info("Saving file: " + fileName + " at path: " + path.toAbsolutePath());
-        Files.createDirectories(path.getParent());
-        Files.write(path, image.getBytes());
+        // Logic to upload file to S3
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket("your-bucket-name")
+                .key("images/" + fileName)
+                .build();
 
-        return fileName;
+        s3Client.putObject(putObjectRequest, RequestBody.fromBytes(image.getBytes()));
+        return "images/" + fileName; // Return the path to store in the database
+    }
+
+    private void deleteImageFromS3(String fileName) {
+        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                .bucket("your-bucket-name")
+                .key("images/" + fileName)
+                .build();
+
+        s3Client.deleteObject(deleteObjectRequest);
     }
 
 }
