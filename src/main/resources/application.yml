@@ -1,0 +1,39 @@
+spring:
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: anarbekovamyskal6@gmail.com
+    password: cjeperiishhajlml # The generated app password without spaces
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  application:
+    name: Thoughts API
+
+  datasource:
+    url: jdbc:postgresql://212.132.97.24:5432/amyskal
+    username: amyskal
+    password: r3Qqa9g3AqvB
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # can be none, update, create, create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+
+file:
+  upload-dir: C:/Users/argoa/Desktop/projects/edu_internship/thoughts_api/images/
+
+
+testing:
+  app:
+    secret: QD!#32sdASDqwetyuIXlzxcvnq9rTQTYU+XtCW$  # Add this line with your secret key
+    time: 3600
